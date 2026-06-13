@@ -8,8 +8,8 @@ import io
 from datetime import datetime
 
 SHEET_ID = "1YeDuROB0ghVP0vluJi1yWNOogJSwtIsC"
-EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&id={SHEET_ID}"
-DATA_FILE = "data.json"
+GID = "21253449"
+EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&id={SHEET_ID}&gid={GID}"DATA_FILE = "data.json"
 HASH_FILE = "data_hash.txt"
 GITHUB_TOKEN = os.environ.get("GH_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPO")
