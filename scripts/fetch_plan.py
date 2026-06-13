@@ -27,12 +27,11 @@ def fetch_sheet():
     reader = csv.reader(io.StringIO(text))
     all_rows = list(reader)
     print(f"Łącznie wierszy w CSV: {len(all_rows)}")
-    for i, row in enumerate(all_rows[:10]):
-        print(f"Wiersz {i}: {row}")
     rows = []
     for row in all_rows:
-        if len(row) >= 9 and row[1] and "202" in row[1]:
+        if len(row) >= 9 and row[2] and "202" in row[2]:
             rows.append(row)
+    print(f"Wierszy z danymi: {len(rows)}")
     return rows
 
 def compute_hash(data):
@@ -63,7 +62,7 @@ def main():
     if not rows:
         print("Brak danych — przerywam")
         return
-    print(f"Pobrano {len(rows)} wierszy")
+    print(f"Pobrano {len(rows)} wierszy z danymi")
     new_hash = compute_hash(rows)
     old_hash_content, hash_sha = read_github_file(HASH_FILE)
     old_hash = old_hash_content.strip() if old_hash_content else ""
