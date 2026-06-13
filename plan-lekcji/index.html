@@ -28,16 +28,15 @@ select{font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid #ddd;b
 .time-cell{font-size:11px;color:#aaa;text-align:right;padding:4px 6px 0 0;display:flex;align-items:flex-start;justify-content:flex-end;min-height:56px}
 .slot{min-height:56px;border-radius:8px;padding:5px 7px;font-size:11px;background:#f0f0ec}
 .slot.empty{background:transparent}
-.slot.cls{cursor:default;border-left:2px solid #378ADD;background:#EBF4FF}
+.slot.cls{border-left:2px solid #378ADD;background:#EBF4FF}
 .slot.online{border-left-color:#1D9E75;background:#E8F8F2}
 .slot.wyrow{border-left-color:#BA7517;background:#FEF6E4}
 .slot.cancelled{border-left-color:#E24B4A;background:#FEF0F0;opacity:.75}
-.slot.moved{border-left-color:#BA7517;background:#FEF6E4}
 .sname{font-weight:600;font-size:11px;line-height:1.3;color:#111}
 .smeta{font-size:10px;color:#666;margin-top:2px;line-height:1.3}
 .badge{display:inline-block;font-size:9px;border-radius:4px;padding:1px 5px;margin-top:3px;font-weight:500}
 .b-online{background:#d1f5e8;color:#0a5c37}
-.b-cancel{background:#fdd;color:#a32d2d;text-decoration:line-through}
+.b-cancel{background:#fdd;color:#a32d2d}
 .b-moved{background:#fef0cc;color:#7a4f00}
 .no-data{text-align:center;padding:3rem;color:#888;font-size:14px}
 .status{font-size:12px;color:#888;text-align:center;padding:.5rem}
@@ -45,7 +44,6 @@ select{font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid #ddd;b
 </style>
 </head>
 <body>
-
 <div class="top">
   <div>
     <div class="top-title">Plan zajęć · Pielęgniarstwo I stopień</div>
@@ -53,7 +51,6 @@ select{font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid #ddd;b
   </div>
   <div class="updated" id="updatedAt">Ładowanie...</div>
 </div>
-
 <div class="controls">
   <div class="week-nav">
     <button class="btn" onclick="prevWeek()">←</button>
@@ -68,15 +65,17 @@ select{font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid #ddd;b
     <option value="">Wszystkie przedmioty</option>
   </select>
 </div>
-
-<div class="changes">
-  <strong>⚠ Zmiany:</strong> 23.06 – przeplanowanie · 26.05 – gr. 2a odwołanie · 02.06 – zajęcia wyrównawcze · 03.06 – Badanie fizykalne przeplanowane
+<div class="changes" id="changesBox" style="display:none">
+  <strong>⚠ Zmiany:</strong> <span id="changesText"></span>
 </div>
-
 <div class="status" id="status">Pobieranie danych...</div>
 <div class="grid-wrap"><div class="grid" id="grid"></div></div>
 
 <script>
+// Kolumny CSV (z przesunięciem o 1 bo pierwsza kolumna jest pusta):
+// [0]=pusty [1]=kierunek [2]=data [3]=dzień [4]=godzina [5]=liczbaH [6]=grupa [7]=tytuł [8]=nazwisko [9]=przedmiot [10]=metoda [11]=miejsce [12]=uwagi
+const COL = { kierunek:1, data:2, dzien:3, godzina:4, grupa:6, nazwisko:8, przedmiot:9, metoda:10, miejsce:11, uwagi:12 };
+
 const DAYS = ["poniedziałek","wtorek","środa","czwartek","piątek"];
 const DAYS_SHORT = ["Pon","Wt","Śr","Czw","Pt"];
 let allRows = [];
@@ -87,18 +86,17 @@ function getMonday(d) {
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   return new Date(new Date(d).setDate(diff));
 }
-
 function fmtDate(d) {
   return d.toLocaleDateString('pl-PL', {day:'2-digit', month:'2-digit'});
 }
-
 function isToday(d) {
   const n = new Date();
   return d.getDate()===n.getDate() && d.getMonth()===n.getMonth() && d.getFullYear()===n.getFullYear();
 }
-
 function parseDate(str) {
-  const p = str.split('.');
+  if (!str) return null;
+  const p = str.trim().split('.');
+  if (p.length < 3) return null;
   return new Date(+p[0], +p[1]-1, +p[2]);
 }
 
@@ -122,19 +120,19 @@ async function loadData() {
 function populateFilters() {
   const groups = new Set(), subjects = new Set();
   allRows.forEach(r => {
-    if (r[5]) groups.add(r[5]);
-    if (r[8]) subjects.add(r[8]);
+    if (r[COL.grupa] && r[COL.data] && r[COL.data].includes('202')) groups.add(r[COL.grupa].trim());
+    if (r[COL.przedmiot] && r[COL.data] && r[COL.data].includes('202')) subjects.add(r[COL.przedmiot].trim());
   });
   const gf = document.getElementById('groupFilter');
   const sf = document.getElementById('subjectFilter');
   gf.innerHTML = '<option value="">Wszystkie grupy</option>';
   sf.innerHTML = '<option value="">Wszystkie przedmioty</option>';
-  [...groups].sort().forEach(g => {
-    gf.innerHTML += `<option value="${g}">${g}</option>`;
-  });
+  [...groups].sort().forEach(g => { if(g) gf.innerHTML += `<option value="${g}">${g}</option>`; });
   [...subjects].sort().forEach(s => {
-    const label = s.length > 40 ? s.substring(0,38)+'…' : s;
-    sf.innerHTML += `<option value="${s}">${label}</option>`;
+    if(s) {
+      const label = s.length > 45 ? s.substring(0,43)+'…' : s;
+      sf.innerHTML += `<option value="${s}">${label}</option>`;
+    }
   });
 }
 
@@ -144,7 +142,6 @@ function render() {
     d.setDate(d.getDate() + i);
     return d;
   });
-
   const d1 = weekDates[0], d5 = weekDates[4];
   document.getElementById('weekLabel').textContent =
     fmtDate(d1) + ' – ' + fmtDate(d5) + ' ' + d5.getFullYear();
@@ -156,17 +153,28 @@ function render() {
   DAYS.forEach(d => { byDayTime[d] = {}; });
 
   allRows.forEach(r => {
-    const [_dir, dateStr, dayStr, time, hours, group, title, name, subject, method, place, note] = r;
+    const dateStr = r[COL.data];
+    const dayStr  = r[COL.dzien];
+    const time    = r[COL.godzina];
+    const group   = r[COL.grupa] ? r[COL.grupa].trim() : '';
+    const name    = r[COL.nazwisko] ? r[COL.nazwisko].split('\n')[0].trim() : '';
+    const subject = r[COL.przedmiot] ? r[COL.przedmiot].trim() : '';
+    const method  = r[COL.metoda] ? r[COL.metoda].trim() : '';
+    const place   = r[COL.miejsce] ? r[COL.miejsce].trim() : '';
+    const note    = r[COL.uwagi] ? r[COL.uwagi].trim() : '';
+
     if (!time || !dateStr || !dayStr) return;
-    const di = DAYS.indexOf(dayStr);
+    const di = DAYS.indexOf(dayStr.trim());
     if (di < 0) return;
     const rd = parseDate(dateStr);
+    if (!rd) return;
     const wd = weekDates[di];
     if (rd.getDate()!==wd.getDate()||rd.getMonth()!==wd.getMonth()||rd.getFullYear()!==wd.getFullYear()) return;
     if (gf && group && !group.includes(gf)) return;
     if (sf && subject !== sf) return;
-    if (!byDayTime[dayStr][time]) byDayTime[dayStr][time] = [];
-    byDayTime[dayStr][time].push({dateStr,group,name,subject,method,place,note});
+    if (!byDayTime[dayStr.trim()]) return;
+    if (!byDayTime[dayStr.trim()][time]) byDayTime[dayStr.trim()][time] = [];
+    byDayTime[dayStr.trim()][time].push({group, name, subject, method, place, note});
   });
 
   const allTimes = new Set();
@@ -174,7 +182,6 @@ function render() {
   const sortedTimes = [...allTimes].sort();
 
   const grid = document.getElementById('grid');
-
   if (sortedTimes.length === 0) {
     grid.innerHTML = '';
     document.getElementById('status').textContent = 'Brak zajęć w tym tygodniu';
@@ -192,30 +199,30 @@ function render() {
   sortedTimes.forEach(time => {
     html += `<div class="time-cell">${time.split('-')[0]}</div>`;
     DAYS.forEach(day => {
-      const entries = byDayTime[day][time];
+      const entries = byDayTime[day] && byDayTime[day][time];
       if (!entries || entries.length === 0) { html += '<div class="slot empty"></div>'; return; }
       const e = entries[0];
       const multi = entries.length > 1;
       const isOnline = e.method && e.method.includes('on line');
-      const isCancelled = e.note && (e.note.toLowerCase().includes('odwoł'));
-      const isMoved = e.note && (e.note.toLowerCase().includes('przeplanow'));
-      const isWyrow = e.subject && e.subject.includes('wyrównaw');
+      const isCancelled = e.note && e.note.toLowerCase().includes('odwoł');
+      const isMoved = e.note && e.note.toLowerCase().includes('przeplanow');
+      const isWyrow = e.subject && e.subject.toLowerCase().includes('wyrównaw');
       let cls = 'slot cls';
       if (isOnline) cls = 'slot online';
       if (isWyrow) cls = 'slot wyrow';
       if (isCancelled) cls += ' cancelled';
+      const sname = e.subject ? (e.subject.length>35 ? e.subject.substring(0,33)+'…' : e.subject) : '';
+      const teacher = e.name ? e.name.split(' ')[0] : '';
       html += `<div class="${cls}">`;
-      const sname = e.subject ? (e.subject.length>32?e.subject.substring(0,30)+'…':e.subject) : '';
       html += `<div class="sname">${sname}</div>`;
-      if (e.group || multi) html += `<div class="smeta">gr. ${e.group||''}${multi?' +'+( entries.length-1):''}${e.name?' · '+e.name.split(' ')[0]:''}</div>`;
-      else if (e.name) html += `<div class="smeta">${e.name.split(' ')[0]}</div>`;
+      if (e.group) html += `<div class="smeta">gr. ${e.group}${multi?' +'+(entries.length-1):''}${teacher?' · '+teacher:''}</div>`;
+      else if (teacher) html += `<div class="smeta">${teacher}</div>`;
       if (isOnline) html += '<span class="badge b-online">online</span>';
       if (isCancelled) html += '<span class="badge b-cancel">odwołane</span>';
       else if (isMoved) html += '<span class="badge b-moved">przeplanowane</span>';
       html += '</div>';
     });
   });
-
   grid.innerHTML = html;
 }
 
