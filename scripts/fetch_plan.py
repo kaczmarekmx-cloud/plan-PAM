@@ -19,15 +19,18 @@ def fetch_sheet():
     resp = requests.get(EXPORT_URL, headers=headers, timeout=30, allow_redirects=True)
     print(f"Status: {resp.status_code}, Content-Type: {resp.headers.get('Content-Type','')}")
     if resp.status_code != 200:
-        print(f"Błąd HTTP: {resp.status_code}")
         return []
     if 'text/html' in resp.headers.get('Content-Type', ''):
-        print("Przekierowano na logowanie — arkusz nie jest publiczny")
+        print("Przekierowano na logowanie")
         return []
-    rows = []
     text = resp.content.decode('utf-8', errors='replace')
     reader = csv.reader(io.StringIO(text))
-    for row in reader:
+    all_rows = list(reader)
+    print(f"Łącznie wierszy w CSV: {len(all_rows)}")
+    for i, row in enumerate(all_rows[:10]):
+        print(f"Wiersz {i}: {row}")
+    rows = []
+    for row in all_rows:
         if len(row) >= 9 and row[1] and "202" in row[1]:
             rows.append(row)
     return rows
