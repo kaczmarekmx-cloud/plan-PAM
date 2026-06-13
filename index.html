@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan zajęć — Pielęgniarstwo I ST</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f0;color:#1a1a1a;min-height:100vh}
+.top{background:#fff;border-bottom:1px solid #e5e5e0;padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.top-title{font-size:17px;font-weight:600}
+.top-sub{font-size:13px;color:#666;margin-top:2px}
+.updated{font-size:12px;color:#888;background:#f5f5f0;padding:4px 10px;border-radius:20px}
+.controls{padding:1rem 1.5rem;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.week-nav{display:flex;align-items:center;gap:6px}
+.btn{background:#fff;border:1px solid #ddd;color:#333;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;transition:background .15s}
+.btn:hover{background:#f0f0ec}
+.btn-today{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.btn-today:hover{background:#333}
+.week-label{font-size:14px;font-weight:500;min-width:190px;text-align:center}
+select{font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#333;cursor:pointer}
+.changes{margin:0 1.5rem 1rem;background:#fffbeb;border:1px solid #f0c040;border-radius:10px;padding:.75rem 1rem;font-size:13px;color:#7a5c00}
+.changes strong{font-weight:600}
+.grid-wrap{padding:0 1.5rem 2rem;overflow-x:auto}
+.grid{display:grid;grid-template-columns:60px repeat(5,1fr);gap:3px;min-width:600px}
+.day-hdr{font-size:11px;font-weight:600;color:#888;text-align:center;padding:8px 4px;letter-spacing:.05em;text-transform:uppercase}
+.day-hdr.today{color:#0a7c4a;font-weight:700}
+.time-cell{font-size:11px;color:#aaa;text-align:right;padding:4px 6px 0 0;display:flex;align-items:flex-start;justify-content:flex-end;min-height:56px}
+.slot{min-height:56px;border-radius:8px;padding:5px 7px;font-size:11px;background:#f0f0ec}
+.slot.empty{background:transparent}
+.slot.cls{border-left:2px solid #378ADD;background:#EBF4FF}
+.slot.online{border-left-color:#1D9E75;background:#E8F8F2}
+.slot.wyrow{border-left-color:#BA7517;background:#FEF6E4}
+.slot.cancelled{border-left-color:#E24B4A;background:#FEF0F0;opacity:.75}
+.sname{font-weight:600;font-size:11px;line-height:1.3;color:#111}
+.smeta{font-size:10px;color:#666;margin-top:2px;line-height:1.3}
+.badge{display:inline-block;font-size:9px;border-radius:4px;padding:1px 5px;margin-top:3px;font-weight:500}
+.b-online{background:#d1f5e8;color:#0a5c37}
+.b-cancel{background:#fdd;color:#a32d2d}
+.b-moved{background:#fef0cc;color:#7a4f00}
+.no-data{text-align:center;padding:3rem;color:#888;font-size:14px}
+.status{font-size:12px;color:#888;text-align:center;padding:.5rem}
+.today-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:#0a7c4a;margin-left:3px;vertical-align:middle}
+</style>
+</head>
+<body>
+<div class="top">
+  <div>
+    <div class="top-title">Plan zajęć · Pielęgniarstwo I stopień</div>
+    <div class="top-sub">2025/2026 · ANSM Poznań</div>
+  </div>
+  <div class="updated" id="updatedAt">Ładowanie...</div>
+</div>
+<div class="controls">
+  <div class="week-nav">
+    <button class="btn" onclick="prevWeek()">←</button>
+    <div class="week-label" id="weekLabel"></div>
+    <button class="btn" onclick="nextWeek()">→</button>
+  </div>
+  <button class="btn btn-today" onclick="goToday()">Dzisiaj</button>
+  <select id="groupFilter" onchange="render()">
+    <option value="">Wszystkie grupy</option>
+  </select>
+  <select id="subjectFilter" onchange="render()">
+    <option value="">Wszystkie przedmioty</option>
+  </select>
+</div>
+<div class="changes" id="changesBox" style="display:none">
+  <strong>⚠ Zmiany:</strong> <span id="changesText"></span>
+</div>
+<div class="status" id="status">Pobieranie danych...</div>
+<div class="grid-wrap"><div class="grid" id="grid"></div></div>
+
+<script>
+// Kolumny CSV (z przesunięciem o 1 bo pierwsza kolumna jest pusta):
+// [0]=pusty [1]=kierunek [2]=data [3]=dzień [4]=godzina [5]=liczbaH [6]=grupa [7]=tytuł [8]=nazwisko [9]=przedmiot [10]=metoda [11]=miejsce [12]=uwagi
+const COL = { kierunek:1, data:2, dzien:3, godzina:4, grupa:6, nazwisko:8, przedmiot:9, metoda:10, miejsce:11, uwagi:12 };
+
+const DAYS = ["poniedziałek","wtorek","środa","czwartek","piątek"];
+const DAYS_SHORT = ["Pon","Wt","Śr","Czw","Pt"];
+let allRows = [];
+let currentMonday = getMonday(new Date());
+
+function getMonday(d) {
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(new Date(d).setDate(diff));
+}
+function fmtDate(d) {
+  return d.toLocaleDateString('pl-PL', {day:'2-digit', month:'2-digit'});
+}
+function isToday(d) {
+  const n = new Date();
+  return d.getDate()===n.getDate() && d.getMonth()===n.getMonth() && d.getFullYear()===n.getFullYear();
+}
+function parseDate(str) {
+  if (!str) return null;
+  const p = str.trim().split('.');
+  if (p.length < 3) return null;
+  return new Date(+p[0], +p[1]-1, +p[2]);
+}
+
+async function loadData() {
+  try {
+    const r = await fetch('data.json?t=' + Date.now());
+    if (!r.ok) throw new Error('Brak danych');
+    const d = await r.json();
+    allRows = d.rows || [];
+    const upd = new Date(d.updated);
+    document.getElementById('updatedAt').textContent =
+      'Aktualizacja: ' + upd.toLocaleString('pl-PL', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    document.getElementById('status').textContent = '';
+    populateFilters();
+    render();
+  } catch(e) {
+    document.getElementById('status').textContent = 'Błąd pobierania danych. Odśwież stronę.';
+  }
+}
+
+function populateFilters() {
+  const groups = new Set(), subjects = new Set();
+  allRows.forEach(r => {
+    if (r[COL.grupa] && r[COL.data] && r[COL.data].includes('202')) groups.add(r[COL.grupa].trim());
+    if (r[COL.przedmiot] && r[COL.data] && r[COL.data].includes('202')) subjects.add(r[COL.przedmiot].trim());
+  });
+  const gf = document.getElementById('groupFilter');
+  const sf = document.getElementById('subjectFilter');
+  gf.innerHTML = '<option value="">Wszystkie grupy</option>';
+  sf.innerHTML = '<option value="">Wszystkie przedmioty</option>';
+  [...groups].sort().forEach(g => { if(g) gf.innerHTML += `<option value="${g}">${g}</option>`; });
+  [...subjects].sort().forEach(s => {
+    if(s) {
+      const label = s.length > 45 ? s.substring(0,43)+'…' : s;
+      sf.innerHTML += `<option value="${s}">${label}</option>`;
+    }
+  });
+}
+
+function render() {
+  const weekDates = DAYS.map((_,i) => {
+    const d = new Date(currentMonday);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  const d1 = weekDates[0], d5 = weekDates[4];
+  document.getElementById('weekLabel').textContent =
+    fmtDate(d1) + ' – ' + fmtDate(d5) + ' ' + d5.getFullYear();
+
+  const gf = document.getElementById('groupFilter').value;
+  const sf = document.getElementById('subjectFilter').value;
+
+  const byDayTime = {};
+  DAYS.forEach(d => { byDayTime[d] = {}; });
+
+  allRows.forEach(r => {
+    const dateStr = r[COL.data];
+    const dayStr  = r[COL.dzien];
+    const time    = r[COL.godzina];
+    const group   = r[COL.grupa] ? r[COL.grupa].trim() : '';
+    const name    = r[COL.nazwisko] ? r[COL.nazwisko].split('\n')[0].trim() : '';
+    const subject = r[COL.przedmiot] ? r[COL.przedmiot].trim() : '';
+    const method  = r[COL.metoda] ? r[COL.metoda].trim() : '';
+    const place   = r[COL.miejsce] ? r[COL.miejsce].trim() : '';
+    const note    = r[COL.uwagi] ? r[COL.uwagi].trim() : '';
+
+    if (!time || !dateStr || !dayStr) return;
+    const di = DAYS.indexOf(dayStr.trim());
+    if (di < 0) return;
+    const rd = parseDate(dateStr);
+    if (!rd) return;
+    const wd = weekDates[di];
+    if (rd.getDate()!==wd.getDate()||rd.getMonth()!==wd.getMonth()||rd.getFullYear()!==wd.getFullYear()) return;
+    if (gf && group && !group.includes(gf)) return;
+    if (sf && subject !== sf) return;
+    if (!byDayTime[dayStr.trim()]) return;
+    if (!byDayTime[dayStr.trim()][time]) byDayTime[dayStr.trim()][time] = [];
+    byDayTime[dayStr.trim()][time].push({group, name, subject, method, place, note});
+  });
+
+  const allTimes = new Set();
+  Object.values(byDayTime).forEach(t => Object.keys(t).forEach(k => allTimes.add(k)));
+  const sortedTimes = [...allTimes].sort();
+
+  const grid = document.getElementById('grid');
+  if (sortedTimes.length === 0) {
+    grid.innerHTML = '';
+    document.getElementById('status').textContent = 'Brak zajęć w tym tygodniu';
+    return;
+  }
+  document.getElementById('status').textContent = '';
+
+  let html = '<div></div>';
+  DAYS.forEach((d,i) => {
+    const wd = weekDates[i];
+    const tod = isToday(wd);
+    html += `<div class="day-hdr${tod?' today':''}">${DAYS_SHORT[i]} ${fmtDate(wd)}${tod?'<span class="today-dot"></span>':''}</div>`;
+  });
+
+  sortedTimes.forEach(time => {
+    html += `<div class="time-cell">${time.split('-')[0]}</div>`;
+    DAYS.forEach(day => {
+      const entries = byDayTime[day] && byDayTime[day][time];
+      if (!entries || entries.length === 0) { html += '<div class="slot empty"></div>'; return; }
+      const e = entries[0];
+      const multi = entries.length > 1;
+      const isOnline = e.method && e.method.includes('on line');
+      const isCancelled = e.note && e.note.toLowerCase().includes('odwoł');
+      const isMoved = e.note && e.note.toLowerCase().includes('przeplanow');
+      const isWyrow = e.subject && e.subject.toLowerCase().includes('wyrównaw');
+      let cls = 'slot cls';
+      if (isOnline) cls = 'slot online';
+      if (isWyrow) cls = 'slot wyrow';
+      if (isCancelled) cls += ' cancelled';
+      const sname = e.subject ? (e.subject.length>35 ? e.subject.substring(0,33)+'…' : e.subject) : '';
+      const teacher = e.name ? e.name.split(' ')[0] : '';
+      html += `<div class="${cls}">`;
+      html += `<div class="sname">${sname}</div>`;
+      if (e.group) html += `<div class="smeta">gr. ${e.group}${multi?' +'+(entries.length-1):''}${teacher?' · '+teacher:''}</div>`;
+      else if (teacher) html += `<div class="smeta">${teacher}</div>`;
+      if (isOnline) html += '<span class="badge b-online">online</span>';
+      if (isCancelled) html += '<span class="badge b-cancel">odwołane</span>';
+      else if (isMoved) html += '<span class="badge b-moved">przeplanowane</span>';
+      html += '</div>';
+    });
+  });
+  grid.innerHTML = html;
+}
+
+function prevWeek() { currentMonday.setDate(currentMonday.getDate()-7); render(); }
+function nextWeek() { currentMonday.setDate(currentMonday.getDate()+7); render(); }
+function goToday() { currentMonday = getMonday(new Date()); render(); }
+
+loadData();
+setInterval(loadData, 5 * 60 * 1000);
+</script>
+</body>
+</html>
